@@ -56,7 +56,7 @@ pipeline {
                 sh ''' 
                     sam build
                     sam validate --region us-east-1
-                    sam deploy --force-upload --stack-name todo-list-aws --region us-east-1 --resolve-s3 --config-env staging --no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-confirm-changeset | tee url_output.txt
+                    sam deploy --force-upload --stack-name todo-list-aws-staging --region us-east-1 --resolve-s3 --config-env staging --no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-confirm-changeset | tee url_output.txt
                 '''
                 
             }
@@ -71,7 +71,7 @@ pipeline {
                 script {
                     def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
             		echo "${BASE_URL}"
-                    def INTEGRATION = sh( script: "ksh /var/lib/jenkins/workspace/cp1D/pipelines/PIPELINE-FULL-STAGING/tests.ksh ${BASE_URL}", returnStdout: true)
+                    def INTEGRATION = sh( script: "ksh /var/lib/jenkins/workspace/cp1D/pipelines/common-steps/tests.ksh ${BASE_URL}", returnStdout: true)
                 }
 
                 echo 'Ejecución de las pruebas de integración'

@@ -1,0 +1,72 @@
+pipeline {
+    agent any
+    stages {
+        
+        // Etapa “Get Code” para descargar el código, de la rama master
+        stage('Get Code'){
+            
+            steps{
+                
+                echo 'Descarga código fuente de la rama master'
+                git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
+                
+            }
+            
+        }
+
+        //  Etapa “Set Up” para descargar librerías necesarias
+        stage('SetUp'){
+            
+            steps{
+                echo 'Setup Virtualenv for testing'
+                sh "bash /var/lib/jenkins/workspace/todo-list-aws-CD/pipelines/PIPELINE-FULL-STAGING/setup.sh"
+            }
+            
+        }
+        
+        // Etapa de despliegue SAM (“Deploy”) stack production
+        stage('Deploy'){
+            
+            steps{
+                
+                echo 'Despliegue SAM'
+                sh ''' 
+                    sam build
+                    sam validate --region us-east-1
+                    sam deploy --force-upload --stack-name todo-list-aws-production --region us-east-1 --resolve-s3 --config-env production --no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-confirm-changeset | tee url_output.txt
+                '''
+                
+            }
+            
+        }
+        
+        // Etapa “Rest Test” para la ejecución de las pruebas de integración
+        stage('Rest Test'){
+            
+            steps{
+                
+                script {
+                    def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-production --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
+            		echo "${BASE_URL}"
+                    def INTEGRATION = sh( script: "ksh /var/lib/jenkins/workspace/todo-list-aws-CD/pipelines/common-steps/tests.ksh ${BASE_URL}", returnStdout: true)
+                }
+
+                echo 'Ejecución de las pruebas de integración'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+            		sh '''pytest --junitxml=test/integration/result-rest.xml -k "not deletetodo and not updatetodo and not addtodo" -s test/integration/todoApiTest.py'''
+        		}
+        		
+            }
+        }
+
+    }
+    
+    post { 
+	    always { 
+	         echo 'Elimir stack creado'
+	         sh "aws cloudformation delete-stack --stack-name todo-list-aws-production"
+		     echo 'Borrar WORKSPACE'
+		     cleanWs()
+	    }
+	}
+}

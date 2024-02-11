@@ -56,7 +56,7 @@ pipeline {
                 sh ''' 
                     sam build
                     sam validate --region us-east-1
-                    sam deploy --force-upload --stack-name todo-list-aws --region us-east-1 --resolve-s3 --config-env staging --no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-confirm-changeset | tee url_output.txt
+                    sam deploy --force-upload --stack-name todo-list-aws-staging --region us-east-1 --resolve-s3 --config-env staging --no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-confirm-changeset | tee url_output.txt
                 '''
                 
             }

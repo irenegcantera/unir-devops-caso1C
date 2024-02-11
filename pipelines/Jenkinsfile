@@ -109,7 +109,7 @@ pipeline {
     post { 
 	    always { 
 		     echo 'Elimir stack creado'
-	             sh "aws cloudformation delete-stack --stack-name todo-list-aws-production"
+	             sh "aws cloudformation delete-stack --stack-name todo-list-aws-staging"
 		     echo 'Borrar WORKSPACE'
 		     cleanWs()
 	    }

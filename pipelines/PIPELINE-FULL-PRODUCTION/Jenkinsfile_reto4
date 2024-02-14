@@ -9,6 +9,8 @@ pipeline {
                 
                 echo 'Descarga código fuente de la rama master'
                 git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
+                echo 'Descarga configuración código fuente de la rama production'
+                git branch: 'production', url: 'https://github.com/irenegcantera/todo-list-aws-config.git'
                 
             }
             

@@ -9,6 +9,7 @@ if [ $val -ne 0 ] ; then
 else
         # SED FILE
         A=`egrep -ia ^BASE_URL ${URL_TEST}`
+        echo $A
         sed -i "s|${A}|BASE_URL = \"${URL}\"|g" $FILE
         exit 0
 fi

@@ -1,4 +1,4 @@
-#!/bin/ksh
+#!/bin/sh
 FILE=test/integration/todoApiTest.py
 #URL
 URL=$1

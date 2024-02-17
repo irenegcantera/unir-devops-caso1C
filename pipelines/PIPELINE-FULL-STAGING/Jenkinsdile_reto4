@@ -2,19 +2,19 @@ pipeline {
     agent any
     stages {
         
-        // Etapa “Get Code” para descargar el código, de la rama master
+        // Etapa “Get Code” para descargar el código, de la rama develop
         stage('Get Code'){
             
             steps{
                 
                 dir("application") {
-                    echo 'Descarga código fuente de la rama master'
-                    git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
+                    echo 'Descarga código fuente de la rama develop'
+                    git branch: 'develop', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
                 }
                 
                 dir("config") {
-                    echo 'Descarga configuración código fuente de la rama production'
-                    git branch: 'production', url: 'https://github.com/irenegcantera/todo-list-aws-config.git'
+                    echo 'Descarga configuración código fuente de la rama staging'
+                    git branch: 'staging', url: 'https://github.com/irenegcantera/todo-list-aws-config.git'
                 }
                 
             }
@@ -26,21 +26,44 @@ pipeline {
             
             steps{
                 echo 'Setup Virtualenv for testing'
-                sh "bash /var/lib/jenkins/workspace/todo-list-aws-CD/application/pipelines/PIPELINE-FULL-STAGING/setup.sh"
+                sh "bash /var/lib/jenkins/workspace/todo-list-aws-CI/application/pipelines/PIPELINE-FULL-STAGING/setup.sh"
             }
             
         }
         
-        // Etapa de despliegue SAM (“Deploy”) stack production
+        // Etapa “Static Test” para la ejecución de las pruebas de análisis estático
+        stage('Static Test'){
+            
+            steps{
+                
+                echo 'Ejecución de las pruebas de análisis estático'
+                
+                echo 'Analisis de código estático'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    sh ''' flake8 --format=pylint --exit-zero /var/lib/jenkins/workspace/todo-list-aws-CI/application/src >flake8.out '''
+                    recordIssues qualityGates: [[threshold: 8, type: 'TOTAL', unstable: true], [threshold: 10, type: 'TOTAL', unstable: false]], tools: [flake8(name: 'Flake8', pattern: 'flake8.out')]
+    			 }
+    			
+                echo 'Seguridad código estático'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    sh ''' bandit --exit-zero -r /var/lib/jenkins/workspace/todo-list-aws-CI/application/src -f custom -o bandit.out --severity-level all --msg-template "{abspath}:{line}: {severity}: {test_id}: {msg}" '''
+                    recordIssues qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true], [threshold: 4, type: 'TOTAL', unstable: false]], tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')]
+    			 }  
+    			
+            }
+            
+        }
+        
+        // Etapa de despliegue SAM (“Deploy”) stack staging
         stage('Deploy'){
             
             steps{
                 
                 echo 'Despliegue SAM'
                 sh ''' 
-                    sam build --config-file /var/lib/jenkins/workspace/todo-list-aws-CD/config/samconfig.toml --template-file /var/lib/jenkins/workspace/todo-list-aws-CD/application/template.yaml
-                    sam validate --region us-east-1 --template-file /var/lib/jenkins/workspace/todo-list-aws-CD/application/template.yaml
-                    sam deploy --force-upload --stack-name todo-list-aws-production --region us-east-1 --resolve-s3 --config-env production --config-file /var/lib/jenkins/workspace/todo-list-aws-CD/config/samconfig.toml --template-file /var/lib/jenkins/workspace/todo-list-aws-CD/application/template.yaml --no-fail-on-empty-changeset --no-confirm-changeset | tee url_output.txt
+                    sam build --config-file /var/lib/jenkins/workspace/todo-list-aws-CI/config/samconfig.toml --template-file /var/lib/jenkins/workspace/todo-list-aws-CI/application/template.yaml
+                    sam validate --region us-east-1 --template-file /var/lib/jenkins/workspace/todo-list-aws-CI/application/template.yaml
+                    sam deploy --force-upload --stack-name todo-list-aws-staging --region us-east-1 --resolve-s3 --config-env staging --config-file /var/lib/jenkins/workspace/todo-list-aws-CI/config/samconfig.toml --template-file /var/lib/jenkins/workspace/todo-list-aws-CI/application/template.yaml --no-fail-on-empty-changeset --no-confirm-changeset | tee url_output.txt
                 '''
                 
             }
@@ -53,16 +76,39 @@ pipeline {
             steps{
                 
                 script {
-                    def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-production --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
+                    def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-staging --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
             		echo "${BASE_URL}"
-            		sh 'chmod +x /var/lib/jenkins/workspace/todo-list-aws-CD/application/pipelines/common-steps/tests.sh'
-                    def INTEGRATION = sh( script: "/var/lib/jenkins/workspace/todo-list-aws-CD/application/pipelines/common-steps/tests.sh ${BASE_URL}", returnStdout: true)
+            		sh 'chmod +x /var/lib/jenkins/workspace/todo-list-aws-CI/application/pipelines/common-steps/tests.sh'
+                    def INTEGRATION = sh( script: "/var/lib/jenkins/workspace/todo-list-aws-CI/application/pipelines/common-steps/tests.sh ${BASE_URL}", returnStdout: true)
                 }
 
                 echo 'Ejecución de las pruebas de integración'
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-            		sh '''pytest --junitxml=application/test/integration/result-rest.xml -k "not deletetodo and not updatetodo and not addtodo" -s application/test/integration/todoApiTest.py'''
+            		sh '''pytest --junitxml=application/test/integration/result-rest.xml -s application/test/integration/todoApiTest.py'''
         		}
+        		
+            }
+        }
+        
+        // Etapa “Promote” para marcar la versión como “Release” y ser desplegada en producción
+        stage('Promote'){
+            
+            steps{
+                
+                echo 'Marcando la versión como RELEASE'
+                
+                //withCredentials([sshUserPrivateKey(credentialsId: 'GitHub_Access_SSH', keyFileVariable: 'SSH_KEY')]) {
+                //    sh '''
+                //        git add .
+                //        git commit -m "Subir cambios develop a master"
+                //        git push origin develop
+                //        git checkout -b master 
+                //        git merge develop 
+                //        git push origin master
+                //    '''
+                //}
+
+                echo 'Disponible para desplegar en PRODUCCIÓN'
         		
             }
         }
@@ -72,7 +118,7 @@ pipeline {
     post { 
 	    always { 
 	         echo 'Elimir stack creado'
-	         sh "aws cloudformation delete-stack --stack-name todo-list-aws-production"
+	         sh "aws cloudformation delete-stack --stack-name todo-list-aws-staging"
 		     echo 'Borrar WORKSPACE'
 		     cleanWs()
 	    }

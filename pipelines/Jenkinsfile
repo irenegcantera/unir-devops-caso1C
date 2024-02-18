@@ -9,7 +9,8 @@ pipeline {
                 
                 echo 'Descarga código fuente de la rama master'
                 git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
-                
+		echo "WORKSPACE: ${WORKSPACE}"
+		    
             }
             
         }
@@ -19,7 +20,7 @@ pipeline {
             
             steps{
                 echo 'Setup Virtualenv for testing'
-                sh "bash /var/lib/jenkins/workspace/todo-list-aws-CD/pipelines/PIPELINE-FULL-STAGING/setup.sh"
+                sh "bash ${WORKSPACE}/pipelines/PIPELINE-FULL-STAGING/setup.sh"
             }
             
         }
@@ -48,13 +49,13 @@ pipeline {
                 script {
                     def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-production --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
             		echo "${BASE_URL}"
-                    def INTEGRATION = sh( script: "ksh /var/lib/jenkins/workspace/todo-list-aws-CD/pipelines/common-steps/tests.ksh ${BASE_URL}", returnStdout: true)
+                    def INTEGRATION = sh( script: "ksh ${WORKSPACE}/pipelines/common-steps/tests.ksh ${BASE_URL}", returnStdout: true)
                 }
 
                 echo 'Ejecución de las pruebas de integración'
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
             		sh '''pytest --junitxml=test/integration/result-rest.xml -k "not deletetodo and not updatetodo and not addtodo" -s test/integration/todoApiTest.py'''
-        		}
+        	}
         		
             }
         }
@@ -65,8 +66,8 @@ pipeline {
 	    always { 
 	         echo 'Elimir stack creado'
 	         sh "aws cloudformation delete-stack --stack-name todo-list-aws-production"
-		     echo 'Borrar WORKSPACE'
-		     cleanWs()
+		 echo 'Borrar WORKSPACE'
+		 cleanWs()
 	    }
 	}
 }

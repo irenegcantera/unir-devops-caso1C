@@ -6,4 +6,3 @@ pyenvunittests
 .coverage
 coverage.xml
 todo-list-aws/
-pipelines/Jenkinsfile

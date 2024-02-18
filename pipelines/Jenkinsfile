@@ -9,7 +9,7 @@ pipeline {
          
                 echo 'Descarga código fuente de la rama master'
                 git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
-		            echo "WORKSPACE: ${WORKSPACE}"
+		echo "WORKSPACE: ${WORKSPACE}"
               
             }
             
@@ -49,7 +49,7 @@ pipeline {
                 script {
                     def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-production --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
             	    echo "${BASE_URL}"
-		    sh 'chmod +x ${WORKSPACE}/application/pipelines/common-steps/tests.sh'
+		    sh 'chmod +x ${WORKSPACE}/pipelines/common-steps/tests.sh'
                     def INTEGRATION = sh( script: "${WORKSPACE}/pipelines/common-steps/tests.sh ${BASE_URL}", returnStdout: true)
                 }
 

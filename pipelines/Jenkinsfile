@@ -6,11 +6,19 @@ pipeline {
         stage('Get Code'){
             
             steps{
-         
-                echo 'Descarga código fuente de la rama master'
-                git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
+                
+                dir("application") {
+                    echo 'Descarga código fuente de la rama master'
+                    git branch: 'master', url: 'https://github.com/irenegcantera/unir-devops-caso1C.git'
+                }
+                
+                dir("config") {
+                    echo 'Descarga configuración código fuente de la rama production'
+                    git branch: 'production', url: 'https://github.com/irenegcantera/todo-list-aws-config.git'
+                }
+
 		echo "WORKSPACE: ${WORKSPACE}"
-              
+                
             }
             
         }
@@ -20,7 +28,7 @@ pipeline {
             
             steps{
                 echo 'Setup Virtualenv for testing'
-                sh "bash ${WORKSPACE}/pipelines/PIPELINE-FULL-STAGING/setup.sh"
+                sh "bash ${WORKSPACE}/application/pipelines/PIPELINE-FULL-STAGING/setup.sh"
             }
             
         }
@@ -32,9 +40,9 @@ pipeline {
                 
                 echo 'Despliegue SAM'
                 sh ''' 
-                    sam build
-                    sam validate --region us-east-1
-                    sam deploy --force-upload --stack-name todo-list-aws-production --region us-east-1 --resolve-s3 --config-env production --no-fail-on-empty-changeset --capabilities CAPABILITY_IAM --no-confirm-changeset | tee url_output.txt
+                    sam build --config-file ${WORKSPACE}/config/samconfig.toml --template-file ${WORKSPACE}/application/template.yaml
+                    sam validate --region us-east-1 --template-file ${WORKSPACE}/application/template.yaml
+                    sam deploy --force-upload --stack-name todo-list-aws-production --region us-east-1 --resolve-s3 --config-env production --config-file ${WORKSPACE}/config/samconfig.toml --template-file ${WORKSPACE}/application/template.yaml --no-fail-on-empty-changeset --no-confirm-changeset | tee url_output.txt
                 '''
                 
             }
@@ -48,15 +56,15 @@ pipeline {
                 
                 script {
                     def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-production --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
-            	    echo "${BASE_URL}"
-		    sh 'chmod +x ${WORKSPACE}/pipelines/common-steps/tests.sh'
-                    def INTEGRATION = sh( script: "${WORKSPACE}/pipelines/common-steps/tests.sh ${BASE_URL}", returnStdout: true)
+            		echo "${BASE_URL}"
+            		sh 'chmod +x ${WORKSPACE}/application/pipelines/common-steps/tests.sh'
+                    def INTEGRATION = sh( script: "${WORKSPACE}/application/pipelines/common-steps/tests.sh ${BASE_URL}", returnStdout: true)
                 }
 
                 echo 'Ejecución de las pruebas de integración'
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-            		  sh '''pytest --junitxml=test/integration/result-rest.xml -k "not deletetodo and not updatetodo and not addtodo" -s test/integration/todoApiTest.py'''
-                }
+            		sh '''pytest --junitxml=application/test/integration/result-rest.xml -k "not deletetodo and not updatetodo and not addtodo" -s application/test/integration/todoApiTest.py'''
+        		}
         		
             }
         }
@@ -67,8 +75,8 @@ pipeline {
 	    always { 
 	         echo 'Elimir stack creado'
 	         sh "aws cloudformation delete-stack --stack-name todo-list-aws-production"
-		       echo 'Borrar WORKSPACE'
-		       cleanWs()
+		     echo 'Borrar WORKSPACE'
+		     cleanWs()
 	    }
-	  }
+	}
 }

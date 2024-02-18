@@ -1,5 +1,7 @@
 pipeline {
+	
     agent any
+	
     stages {
         
         // Etapa “Get Code” para descargar el código, de la rama master
@@ -56,15 +58,15 @@ pipeline {
                 
                 script {
                     def BASE_URL = sh( script: "aws cloudformation describe-stacks --stack-name todo-list-aws-production --query 'Stacks[0].Outputs[?OutputKey==`BaseUrlApi`].OutputValue' --region us-east-1 --output text", returnStdout: true)
-            		echo "${BASE_URL}"
-            		sh 'chmod +x ${WORKSPACE}/application/pipelines/common-steps/tests.sh'
+            	    echo "${BASE_URL}"
+            	    sh 'chmod +x ${WORKSPACE}/application/pipelines/common-steps/tests.sh'
                     def INTEGRATION = sh( script: "${WORKSPACE}/application/pipelines/common-steps/tests.sh ${BASE_URL}", returnStdout: true)
                 }
 
                 echo 'Ejecución de las pruebas de integración'
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
             		sh '''pytest --junitxml=application/test/integration/result-rest.xml -k "not deletetodo and not updatetodo and not addtodo" -s application/test/integration/todoApiTest.py'''
-        		}
+        	}
         		
             }
         }
@@ -72,11 +74,16 @@ pipeline {
     }
     
     post { 
+	    
 	    always { 
+		    
 	         echo 'Elimir stack creado'
 	         sh "aws cloudformation delete-stack --stack-name todo-list-aws-production"
-		     echo 'Borrar WORKSPACE'
-		     cleanWs()
+		 echo 'Borrar WORKSPACE'
+		 cleanWs()
+		    
 	    }
+	    
 	}
+	
 }
